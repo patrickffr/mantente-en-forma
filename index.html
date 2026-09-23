@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Mantente en forma</title>
+<meta name="description" content="Contador diario de flexiones y sentadillas, con historial y calendario de cumplimiento.">
+
+<!-- PWA / iOS -->
+<meta name="theme-color" content="#FF7A59">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="En forma">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="icon" href="./icons/icon-192.png">
+
+<style>
+  :root{
+    --bg-a:#FBF7F2;
+    --bg-b:#F1ECE3;
+    --accent:#FF7A59;
+    --accent-soft:#FFE3D8;
+    --card-bg:rgba(255,255,255,0.86);
+    --text:#2B2B2E;
+    --text-soft:#79767A;
+    --ok:#22A06B;
+    --bad:#E0546B;
+    --shadow: 0 12px 28px rgba(43,30,20,0.10);
+    --radius-lg:28px;
+    --radius-md:18px;
+    --radius-sm:12px;
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+  }
+
+  body.theme-flexiones{
+    --bg-a:#FFE9DE;
+    --bg-b:#FFD3BF;
+    --accent:#FF7A59;
+    --accent-soft:#FFE3D8;
+  }
+  body.theme-sentadillas{
+    --bg-a:#E1F7F1;
+    --bg-b:#C9EFE6;
+    --accent:#1FA898;
+    --accent-soft:#D8F3EE;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    overscroll-behavior:none;
+    -webkit-text-size-adjust:100%;
+  }
+
+  body{
+    position:fixed; inset:0; overflow:hidden;
+    background: linear-gradient(160deg, var(--bg-a), var(--bg-b));
+    transition: background 0.6s ease;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+    color:var(--text);
+    -webkit-user-select:none; user-select:none;
+    -webkit-touch-callout:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  input, textarea{ -webkit-user-select:text; user-select:text; }
+
+  #root{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    padding-top:calc(var(--safe-t) + 14px);
+    padding-bottom:calc(var(--safe-b) + 10px);
+    padding-left:calc(var(--safe-l) + 16px);
+    padding-right:calc(var(--safe-r) + 16px);
+    overflow:hidden;
+  }
+
+  .app-header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:2px 4px 14px 4px;
+    flex:0 0 auto;
+  }
+  .app-title{ font-size:20px; font-weight:800; letter-spacing:-0.2px; margin:0; }
+  .header-actions{ display:flex; gap:8px; }
+  .icon-btn{
+    width:40px; height:40px; border-radius:14px; border:none;
+    background:var(--card-bg); box-shadow:var(--shadow);
+    display:flex; align-items:center; justify-content:center;
+    font-size:18px; color:var(--accent); cursor:pointer;
+  }
+  .icon-btn:active{ transform:scale(0.92); }
+
+  .tabbar{
+    flex:0 0 auto;
+    display:flex; gap:6px;
+    background:rgba(255,255,255,0.55);
+    padding:6px; border-radius:999px;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.03);
+    margin-bottom:14px;
+  }
+  .tab-btn{
+    flex:1; border:none; background:transparent;
+    padding:12px 0; border-radius:999px;
+    font-size:15px; font-weight:700; color:var(--text-soft);
+    transition: background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+  }
+  .tab-btn.active{
+    background:var(--accent); color:#fff;
+    box-shadow:0 8px 18px rgba(0,0,0,0.16);
+  }
+
+  .scroll-area{
+    flex:1; min-height:0; overflow-y:auto;
+    -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
+    padding-bottom:24px;
+  }
+
+  .card{
+    background:var(--card-bg); border-radius:var(--radius-lg);
+    box-shadow:var(--shadow); padding:20px;
+    margin-bottom:14px;
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  }
+
+  .figure-wrap{
+    display:flex; align-items:center; justify-content:center;
+    height:148px; color:var(--accent);
+  }
+  .figure-svg{ width:212px; height:145px; overflow:visible; }
+  .figure-svg svg{ width:100%; height:100%; display:block; }
+
+  .ground-line{ color:var(--text-soft); }
+
+  /* Dos posturas completas (arriba y abajo) superpuestas en el mismo sitio;
+     se funden la una en la otra para mostrar todo el recorrido del
+     movimiento con una pausa clara en cada extremo. */
+  .pose-top{ animation: pose-top-fade 2.8s ease-in-out infinite; }
+  .pose-bottom{ opacity:0; animation: pose-bottom-fade 2.8s ease-in-out infinite; }
+  @keyframes pose-top-fade{
+    0%{ opacity:1; } 15%{ opacity:1; } 50%{ opacity:0; } 65%{ opacity:0; } 100%{ opacity:1; }
+  }
+  @keyframes pose-bottom-fade{
+    0%{ opacity:0; } 15%{ opacity:0; } 50%{ opacity:1; } 65%{ opacity:1; } 100%{ opacity:0; }
+  }
+
+  .counter-value{
+    text-align:center; font-size:58px; font-weight:800;
+    line-height:1; margin:6px 0 2px 0; color:var(--text);
+    font-variant-numeric:tabular-nums;
+  }
+  .counter-label{ text-align:center; color:var(--text-soft); font-size:14px; font-weight:600; margin-bottom:16px; }
+
+  .quickadd-grid{
+    display:flex; flex-wrap:wrap; gap:10px; justify-content:center;
+  }
+  .btn-add{
+    flex:0 0 auto; min-width:64px; padding:14px 10px;
+    border:none; border-radius:16px; background:#fff;
+    box-shadow:0 4px 12px rgba(0,0,0,0.08);
+    font-weight:800; font-size:16px; color:var(--accent);
+    transition:transform 0.1s ease;
+  }
+  .btn-add:active{ transform:scale(0.92); background:var(--accent-soft); }
+
+  .quicksub-grid{
+    display:flex; gap:8px; justify-content:center; margin-top:10px;
+  }
+  .btn-sub{
+    flex:0 0 auto; min-width:52px; padding:9px 8px;
+    border:none; border-radius:14px; background:rgba(0,0,0,0.045);
+    font-weight:700; font-size:13px; color:var(--text-soft);
+    transition:transform 0.1s ease;
+  }
+  .btn-sub:active{ transform:scale(0.92); background:rgba(224,84,107,0.16); color:var(--bad); }
+
+  .today-summary{ display:flex; gap:10px; }
+  .today-pill{
+    flex:1; border-radius:var(--radius-md); padding:14px 12px; text-align:center;
+    background:rgba(255,255,255,0.6);
+  }
+  .today-pill .n{ font-size:24px; font-weight:800; display:block; }
+  .today-pill .l{ font-size:12px; color:var(--text-soft); font-weight:700; text-transform:uppercase; letter-spacing:0.03em; }
+  .today-pill.flex .n{ color:#FF7A59; }
+  .today-pill.sent .n{ color:#1FA898; }
+
+  .segment{
+    display:flex; gap:6px; background:rgba(0,0,0,0.04);
+    padding:4px; border-radius:999px; margin-bottom:14px;
+  }
+  .segment button{
+    flex:1; border:none; background:transparent; padding:9px 0;
+    border-radius:999px; font-weight:700; font-size:13px; color:var(--text-soft);
+  }
+  .segment button.active{ background:#fff; color:var(--text); box-shadow:0 3px 8px rgba(0,0,0,0.08); }
+
+  .history-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 2px; border-bottom:1px solid rgba(0,0,0,0.06);
+    font-size:14px;
+  }
+  .history-row:last-child{ border-bottom:none; }
+  .history-date{ font-weight:700; text-transform:capitalize; flex:0 0 auto; width:34%; }
+  .history-badges{ display:flex; gap:6px; flex:1; justify-content:flex-end; }
+  .badge{ padding:5px 10px; border-radius:999px; font-weight:700; font-size:12.5px; white-space:nowrap; }
+  .badge.flex{ background:#FFE3D8; color:#C1502F; }
+  .badge.sent{ background:#D8F3EE; color:#136F62; }
+  .empty-msg{ text-align:center; color:var(--text-soft); font-size:14px; padding:18px 4px; }
+
+  .modal-overlay{
+    position:absolute; inset:0; background:rgba(20,15,10,0.42);
+    display:flex; align-items:flex-end; justify-content:center;
+    padding: 0;
+    z-index:50;
+  }
+  .modal-sheet{
+    width:100%; max-height:88%; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    background:#FBF9F6; border-radius:26px 26px 0 0;
+    padding:18px 18px calc(var(--safe-b) + 22px) 18px;
+    box-shadow:0 -10px 40px rgba(0,0,0,0.2);
+  }
+  .modal-handle{ width:40px; height:5px; border-radius:4px; background:rgba(0,0,0,0.15); margin:2px auto 14px auto; }
+  .modal-title{ font-size:18px; font-weight:800; margin:0 0 14px 0; text-align:center; }
+
+  .cal-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .cal-arrow{ border:none; background:rgba(0,0,0,0.05); width:36px; height:36px; border-radius:12px; font-size:16px; font-weight:800; color:var(--text); }
+  .cal-month-label{ font-weight:800; font-size:16px; text-transform:capitalize; }
+  .cal-weekdays{ display:grid; grid-template-columns:repeat(7,1fr); margin-bottom:4px; }
+  .cal-weekdays span{ text-align:center; font-size:11px; color:var(--text-soft); font-weight:700; }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:5px; }
+  .cal-cell{ aspect-ratio:1/1; border-radius:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,0.03); font-size:12px; }
+  .cal-cell.empty{ background:transparent; }
+  .cal-cell .d{ font-weight:700; }
+  .cal-cell .mark{ font-size:13px; margin-top:2px; }
+  .cal-cell.done{ background:rgba(34,160,107,0.14); }
+  .cal-cell.done .mark{ color:var(--ok); }
+  .cal-cell.missed{ background:rgba(224,84,107,0.10); }
+  .cal-cell.missed .mark{ color:var(--bad); }
+  .cal-cell.future .d{ color:var(--text-soft); opacity:0.5; }
+  .cal-legend{ display:flex; gap:14px; justify-content:center; margin-top:14px; font-size:12.5px; color:var(--text-soft); }
+
+  .btn-primary{
+    display:block; width:100%; border:none; background:var(--accent); color:#fff;
+    font-weight:800; font-size:15px; padding:14px 0; border-radius:16px; margin-top:16px;
+  }
+  .btn-primary:active{ opacity:0.85; }
+
+  .phone-mock{
+    width:150px; height:230px; margin:4px auto 18px auto;
+    border:4px solid #2B2B2E; border-radius:26px; position:relative; background:#fff;
+    overflow:hidden;
+  }
+  .phone-mock .bar{
+    position:absolute; left:0; right:0; bottom:0; height:34px;
+    background:#F4F1EC; border-top:1px solid rgba(0,0,0,0.08);
+    display:flex; align-items:center; justify-content:flex-end; padding-right:8px;
+  }
+  .phone-mock .dots{
+    width:22px; height:22px; border-radius:8px; background:#fff;
+    box-shadow:0 0 0 2px var(--accent);
+    display:flex; align-items:center; justify-content:center;
+    font-weight:900; font-size:11px; letter-spacing:1px; color:var(--accent);
+  }
+  .phone-mock .screen-hint{ position:absolute; top:14px; left:0; right:0; text-align:center; font-size:11px; color:var(--text-soft); padding:0 10px; }
+  .bounce-arrow{
+    position:absolute; right:16px; bottom:38px; font-size:22px; color:var(--accent);
+    animation:bounce-up 1.1s ease-in-out infinite;
+  }
+  @keyframes bounce-up{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-8px); } }
+
+  .guide-steps{ margin:0; padding-left:20px; }
+  .guide-steps li{ margin-bottom:12px; font-size:14.5px; line-height:1.4; }
+  .guide-steps b{ color:var(--accent); }
+
+  ::-webkit-scrollbar{ display:none; }
+</style>
+</head>
+<body class="theme-flexiones">
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  if(!window.React || !window.ReactDOM){
+    document.getElementById('root').innerHTML =
+      '<div style="padding:60px 24px;text-align:center;font-family:sans-serif;color:#333;">' +
+      'No se pudo cargar la aplicación.<br>Conéctate a internet la primera vez para descargarla y vuelve a abrirla.' +
+      '</div>';
+    return;
+  }
+
+  var h = React.createElement;
+  var useState = React.useState;
+  var useEffect = React.useEffect;
+  var useMemo = React.useMemo;
+
+  // ---------- almacenamiento ----------
+  var STORAGE_KEY = 'mantenteEnForma_v1';
+  var QUICK_ADDS = [1,5,10,15,20,25,30];
+  var QUICK_SUBTRACTS = [1,5];
+
+  function pad2(n){ return String(n).length < 2 ? '0'+n : String(n); }
+
+  function todayKey(){
+    var d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate());
+  }
+
+  function defaultState(){
+    return { version:1, activeExercise:'flexiones', installGuideSeen:false, records:{} };
+  }
+
+  function loadState(){
+    try{
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return defaultState();
+      var parsed = JSON.parse(raw);
+      var base = defaultState();
+      return Object.assign(base, parsed, { records: parsed.records || {} });
+    }catch(e){
+      console.warn('No se pudo leer localStorage', e);
+      return defaultState();
+    }
+  }
+
+  function saveState(state){
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }catch(e){
+      console.warn('No se pudo guardar en localStorage', e);
+    }
+  }
+
+  function addRepsToState(state, exercise, amount){
+    var key = todayKey();
+    var day = state.records[key] || { flexiones:0, sentadillas:0 };
+    var updatedDay = {};
+    updatedDay.flexiones = day.flexiones || 0;
+    updatedDay.sentadillas = day.sentadillas || 0;
+    updatedDay[exercise] = Math.max(0, (updatedDay[exercise]||0) + amount);
+    var records = Object.assign({}, state.records);
+    records[key] = updatedDay;
+    return Object.assign({}, state, { records: records });
+  }
+
+  function getDayTotals(state, key){
+    return state.records[key] || { flexiones:0, sentadillas:0 };
+  }
+
+  function getMonthEntries(state, monthKey){
+    return Object.keys(state.records)
+      .filter(function(k){ return k.indexOf(monthKey) === 0; })
+      .sort(function(a,b){ return b.localeCompare(a); })
+      .map(function(k){
+        var rec = state.records[k];
+        return { date:k, flexiones: rec.flexiones||0, sentadillas: rec.sentadillas||0 };
+      });
+  }
+
+  function getAllDailyEntries(state){
+    return Object.keys(state.records)
+      .sort(function(a,b){ return b.localeCompare(a); })
+      .map(function(k){
+        var rec = state.records[k];
+        return { date:k, flexiones: rec.flexiones||0, sentadillas: rec.sentadillas||0 };
+      });
+  }
+
+  function getMonthlySummary(state){
+    var totals = {};
+    Object.keys(state.records).forEach(function(k){
+      var mk = k.slice(0,7);
+      if(!totals[mk]) totals[mk] = { flexiones:0, sentadillas:0 };
+      totals[mk].flexiones += state.records[k].flexiones || 0;
+      totals[mk].sentadillas += state.records[k].sentadillas || 0;
+    });
+    return Object.keys(totals)
+      .sort(function(a,b){ return b.localeCompare(a); })
+      .map(function(mk){ return { month:mk, flexiones: totals[mk].flexiones, sentadillas: totals[mk].sentadillas }; });
+  }
+
+  function daysInMonth(year, month){ return new Date(year, month+1, 0).getDate(); }
+
+  function getCalendarCells(state, year, month){
+    var first = new Date(year, month, 1);
+    var leading = (first.getDay() + 6) % 7; // lunes=0 ... domingo=6
+    var total = daysInMonth(year, month);
+    var todayStr = todayKey();
+    var cells = [];
+    var i;
+    for(i=0;i<leading;i++) cells.push(null);
+    for(var d=1; d<=total; d++){
+      var key = year + '-' + pad2(month+1) + '-' + pad2(d);
+      var rec = state.records[key];
+      var sum = rec ? (rec.flexiones||0) + (rec.sentadillas||0) : 0;
+      var status;
+      if(key > todayStr) status = 'future';
+      else status = sum > 0 ? 'done' : 'missed';
+      cells.push({ day:d, key:key, status:status });
+    }
+    return cells;
+  }
+
+  var WD_SHORT = ['dom','lun','mar','mié','jue','vie','sáb'];
+  var MONTH_SHORT = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  var MONTH_FULL = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+  function formatDateShort(key){
+    var parts = key.split('-').map(Number);
+    var dt = new Date(parts[0], parts[1]-1, parts[2]);
+    return WD_SHORT[dt.getDay()] + ' ' + parts[2] + ' ' + MONTH_SHORT[parts[1]-1];
+  }
+
+  function formatMonthLabel(monthKey){
+    var parts = monthKey.split('-').map(Number);
+    return MONTH_FULL[parts[1]-1] + ' ' + parts[0];
+  }
+
+  // ---------- siluetas de las figuras (silueta elaborada, dos posturas) ----------
+  // Cada ejercicio se dibuja como una silueta completa (cabeza, torso, brazo
+  // en dos tramos con codo, pierna) en su posición ARRIBA y su posición
+  // ABAJO. Las dos se superponen exactamente en el mismo sitio y se van
+  // fundiendo la una en la otra (crossfade), de forma que en todo momento se
+  // ve con claridad una de las dos posturas completas, y durante la
+  // transición se aprecia perfectamente el recorrido entre ambas.
+
+  var PUSHUP_TOP =
+    '<g class="pose pose-top">' +
+    '<line x1="34" y1="118" x2="100" y2="70" stroke="currentColor" stroke-width="15" stroke-linecap="round"/>' +
+    '<circle cx="100" cy="70" r="11" fill="currentColor"/>' +
+    '<line x1="100" y1="70" x2="150" y2="68" stroke="currentColor" stroke-width="22" stroke-linecap="round"/>' +
+    '<line x1="150" y1="68" x2="165" y2="93" stroke="currentColor" stroke-width="12" stroke-linecap="round"/>' +
+    '<line x1="165" y1="93" x2="180" y2="118" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>' +
+    '<circle cx="180" cy="118" r="7" fill="currentColor"/>' +
+    '<circle cx="34" cy="118" r="7" fill="currentColor"/>' +
+    '<circle cx="162" cy="52" r="13" fill="currentColor"/>' +
+    '</g>';
+
+  var PUSHUP_BOTTOM =
+    '<g class="pose pose-bottom">' +
+    '<line x1="34" y1="118" x2="110" y2="88" stroke="currentColor" stroke-width="15" stroke-linecap="round"/>' +
+    '<circle cx="110" cy="88" r="11" fill="currentColor"/>' +
+    '<line x1="110" y1="88" x2="159" y2="94" stroke="currentColor" stroke-width="22" stroke-linecap="round"/>' +
+    '<line x1="159" y1="94" x2="176" y2="98" stroke="currentColor" stroke-width="12" stroke-linecap="round"/>' +
+    '<line x1="176" y1="98" x2="180" y2="118" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>' +
+    '<circle cx="180" cy="118" r="7" fill="currentColor"/>' +
+    '<circle cx="34" cy="118" r="7" fill="currentColor"/>' +
+    '<circle cx="171" cy="78" r="13" fill="currentColor"/>' +
+    '</g>';
+
+  var SVG_PUSHUP =
+    '<svg viewBox="0 0 220 150" xmlns="http://www.w3.org/2000/svg">' +
+    '<line class="ground-line" x1="14" y1="118" x2="206" y2="118" stroke="currentColor" stroke-width="2" stroke-dasharray="4 6" opacity="0.3"/>' +
+    PUSHUP_TOP + PUSHUP_BOTTOM +
+    '</svg>';
+
+  var SQUAT_TOP =
+    '<g class="pose pose-top">' +
+    '<line x1="100" y1="126" x2="100" y2="96" stroke="currentColor" stroke-width="13" stroke-linecap="round"/>' +
+    '<line x1="100" y1="96" x2="100" y2="64" stroke="currentColor" stroke-width="15" stroke-linecap="round"/>' +
+    '<circle cx="100" cy="64" r="11" fill="currentColor"/>' +
+    '<line x1="100" y1="64" x2="102" y2="38" stroke="currentColor" stroke-width="22" stroke-linecap="round"/>' +
+    '<line x1="102" y1="38" x2="90" y2="58" stroke="currentColor" stroke-width="11" stroke-linecap="round"/>' +
+    '<line x1="90" y1="58" x2="84" y2="80" stroke="currentColor" stroke-width="9" stroke-linecap="round"/>' +
+    '<circle cx="84" cy="80" r="6.5" fill="currentColor"/>' +
+    '<circle cx="100" cy="126" r="7" fill="currentColor"/>' +
+    '<circle cx="104" cy="22" r="13" fill="currentColor"/>' +
+    '</g>';
+
+  var SQUAT_BOTTOM =
+    '<g class="pose pose-bottom">' +
+    '<line x1="100" y1="126" x2="119" y2="103" stroke="currentColor" stroke-width="13" stroke-linecap="round"/>' +
+    '<line x1="119" y1="103" x2="90" y2="90" stroke="currentColor" stroke-width="15" stroke-linecap="round"/>' +
+    '<circle cx="90" cy="90" r="11" fill="currentColor"/>' +
+    '<line x1="90" y1="90" x2="107" y2="70" stroke="currentColor" stroke-width="22" stroke-linecap="round"/>' +
+    '<line x1="107" y1="70" x2="130" y2="62" stroke="currentColor" stroke-width="11" stroke-linecap="round"/>' +
+    '<line x1="130" y1="62" x2="155" y2="68" stroke="currentColor" stroke-width="9" stroke-linecap="round"/>' +
+    '<circle cx="155" cy="68" r="6.5" fill="currentColor"/>' +
+    '<circle cx="100" cy="126" r="7" fill="currentColor"/>' +
+    '<circle cx="117" cy="58" r="13" fill="currentColor"/>' +
+    '</g>';
+
+  var SVG_SQUAT =
+    '<svg viewBox="0 0 220 150" xmlns="http://www.w3.org/2000/svg">' +
+    '<line class="ground-line" x1="60" y1="126" x2="180" y2="126" stroke="currentColor" stroke-width="2" stroke-dasharray="4 6" opacity="0.3"/>' +
+    SQUAT_TOP + SQUAT_BOTTOM +
+    '</svg>';
+
+  var SVG_CALENDAR =
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+    '<rect x="3.5" y="5" width="17" height="16" rx="3.5" stroke="currentColor" stroke-width="2"/>' +
+    '<line x1="3.5" y1="9.5" x2="20.5" y2="9.5" stroke="currentColor" stroke-width="2"/>' +
+    '<line x1="8" y1="3" x2="8" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
+    '<line x1="16" y1="3" x2="16" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
+    '<circle cx="12" cy="14.5" r="1.6" fill="currentColor"/>' +
+    '</svg>';
+
+  var EXERCISES = {
+    flexiones: { label:'Flexiones', theme:'theme-flexiones', svg: SVG_PUSHUP },
+    sentadillas: { label:'Sentadillas', theme:'theme-sentadillas', svg: SVG_SQUAT }
+  };
+
+  // ---------- componentes ----------
+
+  function Header(props){
+    return h('div', { className:'app-header' },
+      h('h1', { className:'app-title' }, 'Mantente en forma'),
+      h('div', { className:'header-actions' },
+        h('button', { className:'icon-btn', onClick: props.onHelp, 'aria-label':'Cómo instalar' }, '?'),
+        h('button', { className:'icon-btn', onClick: props.onCalendar, 'aria-label':'Calendario', dangerouslySetInnerHTML: { __html: SVG_CALENDAR } })
+      )
+    );
+  }
+
+  function TabBar(props){
+    return h('div', { className:'tabbar' },
+      Object.keys(EXERCISES).map(function(key){
+        var active = props.active === key;
+        return h('button', {
+          key: key,
+          className: 'tab-btn' + (active ? ' active' : ''),
+          onClick: function(){ props.onSelect(key); }
+        }, EXERCISES[key].label);
+      })
+    );
+  }
+
+  function ExercisePanel(props){
+    var ex = EXERCISES[props.exercise];
+    var todayTotals = props.todayTotals;
+    var count = todayTotals[props.exercise] || 0;
+    return h('div', { className:'card' },
+      h('div', { className:'figure-wrap' },
+        h('div', { className:'figure-svg', dangerouslySetInnerHTML: { __html: ex.svg } })
+      ),
+      h('div', { className:'counter-value' }, String(count)),
+      h('div', { className:'counter-label' }, ex.label.toLowerCase() + ' de hoy'),
+      h('div', { className:'quickadd-grid' },
+        QUICK_ADDS.map(function(n){
+          return h('button', {
+            key:n, className:'btn-add',
+            onClick:function(){ props.onAdd(n); }
+          }, '+'+n);
+        })
+      ),
+      h('div', { className:'quicksub-grid' },
+        QUICK_SUBTRACTS.map(function(n){
+          return h('button', {
+            key:'sub'+n, className:'btn-sub',
+            onClick:function(){ props.onAdd(-n); },
+            'aria-label':'Restar '+n
+          }, '−'+n);
+        })
+      )
+    );
+  }
+
+  function TodaySummary(props){
+    var t = props.todayTotals;
+    return h('div', { className:'card today-summary' },
+      h('div', { className:'today-pill flex' },
+        h('span', { className:'n' }, String(t.flexiones||0)),
+        h('span', { className:'l' }, 'Flexiones')
+      ),
+      h('div', { className:'today-pill sent' },
+        h('span', { className:'n' }, String(t.sentadillas||0)),
+        h('span', { className:'l' }, 'Sentadillas')
+      )
+    );
+  }
+
+  function HistoryCard(props){
+    var mode = props.mode;
+    var state = props.state;
+    var rows;
+    if(mode === 'diario'){
+      rows = getAllDailyEntries(state).slice(0, 60);
+    }else{
+      rows = getMonthlySummary(state);
+    }
+    return h('div', { className:'card' },
+      h('div', { className:'segment' },
+        h('button', { className:mode==='diario'?'active':'', onClick:function(){ props.onModeChange('diario'); } }, 'Diario'),
+        h('button', { className:mode==='mensual'?'active':'', onClick:function(){ props.onModeChange('mensual'); } }, 'Mensual')
+      ),
+      rows.length === 0
+        ? h('div', { className:'empty-msg' }, 'Todavía no hay registros. ¡Empieza a sumar repeticiones!')
+        : rows.map(function(row){
+            var label = mode === 'diario' ? formatDateShort(row.date) : formatMonthLabel(row.month);
+            return h('div', { className:'history-row', key: row.date || row.month },
+              h('div', { className:'history-date' }, label),
+              h('div', { className:'history-badges' },
+                h('span', { className:'badge flex' }, row.flexiones + ' flex'),
+                h('span', { className:'badge sent' }, row.sentadillas + ' sent')
+              )
+            );
+          })
+    );
+  }
+
+  function CalendarModal(props){
+    var cells = getCalendarCells(props.state, props.year, props.month);
+    return h('div', { className:'modal-overlay', onClick: function(e){ if(e.target === e.currentTarget) props.onClose(); } },
+      h('div', { className:'modal-sheet' },
+        h('div', { className:'modal-handle' }),
+        h('div', { className:'cal-header' },
+          h('button', { className:'cal-arrow', onClick: function(){ props.onChangeMonth(-1); } }, '‹'),
+          h('div', { className:'cal-month-label' }, formatMonthLabel(props.year + '-' + pad2(props.month+1))),
+          h('button', { className:'cal-arrow', onClick: function(){ props.onChangeMonth(1); } }, '›')
+        ),
+        h('div', { className:'cal-weekdays' },
+          ['L','M','X','J','V','S','D'].map(function(d,i){ return h('span', { key:i }, d); })
+        ),
+        h('div', { className:'cal-grid' },
+          cells.map(function(cell, idx){
+            if(!cell) return h('div', { className:'cal-cell empty', key:'e'+idx });
+            var markSymbol = cell.status === 'done' ? '✔' : (cell.status === 'missed' ? '✗' : '');
+            return h('div', { className:'cal-cell ' + cell.status, key: cell.key },
+              h('span', { className:'d' }, String(cell.day)),
+              h('span', { className:'mark' }, markSymbol)
+            );
+          })
+        ),
+        h('div', { className:'cal-legend' },
+          h('span', null, '✔ día con ejercicio'),
+          h('span', null, '✗ día sin ejercicio')
+        ),
+        h('button', { className:'btn-primary', onClick: props.onClose }, 'Cerrar')
+      )
+    );
+  }
+
+  function InstallGuideModal(props){
+    return h('div', { className:'modal-overlay', onClick: function(e){ if(e.target === e.currentTarget) props.onClose(); } },
+      h('div', { className:'modal-sheet' },
+        h('div', { className:'modal-handle' }),
+        h('div', { className:'modal-title' }, 'Instalar en tu iPhone'),
+        h('div', { className:'phone-mock' },
+          h('div', { className:'screen-hint' }, 'Safari'),
+          h('div', { className:'bar' },
+            h('div', { className:'dots' }, '•••')
+          ),
+          h('div', { className:'bounce-arrow' }, '▲')
+        ),
+        h('ol', { className:'guide-steps' },
+          h('li', null, 'Abre esta página con ', h('b', null, 'Safari'), ' (no vale desde Instagram, Gmail u otra app).'),
+          h('li', null, 'Toca los ', h('b', null, '"•••"'), ' de abajo a la derecha (la flecha señala dónde están ahora en iOS).'),
+          h('li', null, 'En el menú que se abre, toca ', h('b', null, '"Compartir"'), '.'),
+          h('li', null, 'En la hoja de compartir, desliza y toca ', h('b', null, '"Ver más"'), ', y luego ', h('b', null, '"Añadir a pantalla de inicio"'), '.')
+        ),
+        h('button', { className:'btn-primary', onClick: props.onClose }, 'Entendido')
+      )
+    );
+  }
+
+  function App(){
+    var initial = useState(loadState)[0];
+    var stateHook = useState(initial);
+    var state = stateHook[0];
+    var setState = stateHook[1];
+
+    var calHook = useState(false);
+    var calendarOpen = calHook[0], setCalendarOpen = calHook[1];
+
+    var guideHook = useState(false);
+    var guideOpen = guideHook[0], setGuideOpen = guideHook[1];
+
+    var histHook = useState('diario');
+    var historyMode = histHook[0], setHistoryMode = histHook[1];
+
+    var now = new Date();
+    var ymHook = useState({ year: now.getFullYear(), month: now.getMonth() });
+    var calYm = ymHook[0], setCalYm = ymHook[1];
+
+    useEffect(function(){
+      if('serviceWorker' in navigator){
+        window.addEventListener('load', function(){
+          navigator.serviceWorker.register('./sw.js', { scope:'./' }).catch(function(err){
+            console.warn('No se pudo registrar el service worker', err);
+          });
+        });
+      }
+      if(!initial.installGuideSeen){
+        setGuideOpen(true);
+      }
+    }, []);
+
+    useEffect(function(){
+      document.body.classList.remove('theme-flexiones', 'theme-sentadillas');
+      document.body.classList.add(EXERCISES[state.activeExercise].theme);
+    }, [state.activeExercise]);
+
+    useEffect(function(){ saveState(state); }, [state]);
+
+    function selectExercise(ex){
+      setState(function(s){ return Object.assign({}, s, { activeExercise: ex }); });
+    }
+
+    function addReps(amount){
+      setState(function(s){ return addRepsToState(s, s.activeExercise, amount); });
+    }
+
+    function closeGuide(){
+      setGuideOpen(false);
+      setState(function(s){ return Object.assign({}, s, { installGuideSeen: true }); });
+    }
+
+    function openCalendarNow(){
+      var d = new Date();
+      setCalYm({ year: d.getFullYear(), month: d.getMonth() });
+      setCalendarOpen(true);
+    }
+
+    function changeMonth(delta){
+      setCalYm(function(ym){
+        var m = ym.month + delta;
+        var y = ym.year;
+        if(m < 0){ m = 11; y -= 1; }
+        if(m > 11){ m = 0; y += 1; }
+        return { year:y, month:m };
+      });
+    }
+
+    var todayTotals = getDayTotals(state, todayKey());
+
+    return h('div', { className:'app-shell' },
+      h(Header, { onHelp:function(){ setGuideOpen(true); }, onCalendar: openCalendarNow }),
+      h(TabBar, { active: state.activeExercise, onSelect: selectExercise }),
+      h('div', { className:'scroll-area' },
+        h(ExercisePanel, { exercise: state.activeExercise, todayTotals: todayTotals, onAdd: addReps }),
+        h(TodaySummary, { todayTotals: todayTotals }),
+        h(HistoryCard, { mode: historyMode, state: state, onModeChange: setHistoryMode })
+      ),
+      calendarOpen ? h(CalendarModal, {
+        state: state, year: calYm.year, month: calYm.month,
+        onChangeMonth: changeMonth, onClose: function(){ setCalendarOpen(false); }
+      }) : null,
+      guideOpen ? h(InstallGuideModal, { onClose: closeGuide }) : null
+    );
+  }
+
+  var root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(h(App));
+})();
+</script>
+</body>
+</html>
